@@ -11,7 +11,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
  */
 
+#include <numeric>
 #include "StatisticCollector.h"
+#include "CPUSnapshot.h"
 
 static clock_t lastCPU, lastSysCPU, lastUserCPU;
 static int numProcessors;
@@ -218,6 +220,17 @@ double StatisticCollector::getLoadAverage() {
     return averages[0];
 }
 
+double StatisticCollector::getExactLoad() {
+    CPUSnapshot curSnap;
+
+    const float ACTIVE_TIME = curSnap.GetActiveTimeTotal(); //- previousSnap.GetActiveTimeTotal();
+    const float IDLE_TIME   = curSnap.GetIdleTimeTotal(); //- previousSnap.GetIdleTimeTotal();
+    const float TOTAL_TIME  = ACTIVE_TIME + IDLE_TIME;
+    double usage = 8 * ACTIVE_TIME / TOTAL_TIME;
+    return usage;
+
+}
+
 void StatisticCollector::logLoadAverage(std::string name) {
     PerformanceUtil::logLoadAverage();
 
@@ -245,3 +258,28 @@ void StatisticCollector::logLoadAverage(std::string name) {
     }
 }
 
+void StatisticCollector::logCpuUsage(std::string name) {
+    StatisticCollector statisticCollector;
+    statisticCollector.init();
+
+    while(true)
+    {
+        if (isStatCollect) {
+            std::this_thread::sleep_for(std::chrono::seconds(60));
+            continue;
+        }
+        //CPUSnapshot previousSnap;
+        std::this_thread::sleep_for(std::chrono::milliseconds(Conts::LOAD_AVG_COLLECTING_GAP*1000));
+        CPUSnapshot curSnap;
+
+        const float ACTIVE_TIME = curSnap.GetActiveTimeTotal(); //- previousSnap.GetActiveTimeTotal();
+        const float IDLE_TIME   = curSnap.GetIdleTimeTotal(); //- previousSnap.GetIdleTimeTotal();
+        const float TOTAL_TIME  = ACTIVE_TIME + IDLE_TIME;
+        float usage = 8 * ACTIVE_TIME / TOTAL_TIME;
+        //usage=usage*8/100;
+        //double usage=statisticCollector.getTotalCpuUsage();
+        std::cout << "total cpu usage: " << usage << " %" << std::endl;
+        //std::this_thread::sleep_for(std::chrono::milliseconds(Conts::LOAD_AVG_COLLECTING_GAP*1000));
+
+    }
+}

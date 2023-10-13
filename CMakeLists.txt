@@ -39,7 +39,12 @@ add_executable(JasmineGraph main.cpp src/server/JasmineGraphServer.cpp src/serve
         src/frontend/core/executor/AbstractExecutor.cpp src/frontend/core/executor/AbstractExecutor.h
         src/frontend/core/executor/impl/TriangleCountExecutor.cpp src/frontend/core/executor/impl/TriangleCountExecutor.h
         src/frontend/core/factory/ExecutorFactory.cpp src/frontend/core/factory/ExecutorFactory.h src/frontend/core/CoreConstants.cpp
-        src/frontend/core/CoreConstants.h)
+        src/frontend/core/CoreConstants.h
+        src/performance/metrics/CPUData.h
+        src/performance/metrics/CPUData.cpp
+        src/performance/metrics/CPUSnapshot.cpp
+        src/performance/metrics/CPUSnapshot.h
+)
 
 target_compile_options(JasmineGraph PRIVATE -std=c++11 -I/usr/include/python3.8)
 

@@ -473,7 +473,7 @@ void PerformanceUtil::collectLocalSLAResourceUtilization(std::string graphId, st
     statisticCollector.init();
     string graphSlaId;
 
-    double loadAverage = statisticCollector.getLoadAverage();
+    double loadAverage = statisticCollector.getExactLoad();//getLoadAverage();
 
     auto executedTime = std::chrono::system_clock::now();
     std::time_t reportTime = std::chrono::system_clock::to_time_t(executedTime);

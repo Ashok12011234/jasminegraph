@@ -48,7 +48,10 @@ public:
     static long getTotalMemoryUsage();
     static double getTotalCpuUsage();
     static double getLoadAverage();
+    static double getExactLoad();
     static void logLoadAverage(std::string name);
+    static void logCpuUsage(std::string name);
+
 };
 
 
