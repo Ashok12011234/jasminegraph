@@ -28,13 +28,13 @@ public:
 
     int getUid();
 
-//    static std::vector<std::vector<string>> getCombinations(std::vector<string> inputVector);
+    static std::vector<std::vector<string>> getCombinations(std::vector<string> inputVector);
 
     static long getTriangleCount(int graphId, std::string host, int port, int dataPort, int partitionId,
                                  std::string masterIP);
 
-//    static long aggregateCentralStoreTriangles(SQLiteDBInterface sqlite, std::string graphId, std::string masterIP,
-//                                               int threadPriority);
+   static long aggregateCentralStoreTriangles(SQLiteDBInterface sqlite, std::string graphId, std::string masterIP,
+                                              int threadPriority);
 
 //    static string isFileAccessibleToWorker(std::string graphId, std::string partitionId, std::string aggregatorHostName,
 //                                           std::string aggregatorPort, std::string masterIP, std::string fileType,
@@ -54,9 +54,9 @@ public:
 //                                                    std::string aggregatorDataPort, int graphId, int partitionId,
 //                                                    std::string masterIP);
 
-//    static string countCentralStoreTriangles(std::string aggregatorHostName, std::string aggregatorPort,
-//                                             std::string host, std::string partitionId, std::string partitionIdList,
-//                                             std::string graphId, std::string masterIP, int threadPriority);
+   static string countCentralStoreTriangles(std::string aggregatorHostName, std::string aggregatorPort,
+                                            std::string host, std::string partitionId, std::string partitionIdList,
+                                            std::string graphId, std::string masterIP, int threadPriority);
 
 //    static bool proceedOrNot(std::set<string> partitionSet, int partitionId);
 //

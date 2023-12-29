@@ -74,6 +74,7 @@ class JasmineGraphInstanceProtocol {
     static const string SEND_CENTRALSTORE_TO_AGGREGATOR;
     static const string SEND_COMPOSITE_CENTRALSTORE_TO_AGGREGATOR;
     static const string AGGREGATE_CENTRALSTORE_TRIANGLES;
+    static const string AGGREGATE_STREAMING_CENTRALSTORE_TRIANGLES;
     static const string AGGREGATE_COMPOSITE_CENTRALSTORE_TRIANGLES;
     static const string PERFORMANCE_STATISTICS;
     static const string START_STAT_COLLECTION;

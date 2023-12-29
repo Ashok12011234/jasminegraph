@@ -36,7 +36,6 @@ class NodeManager {
     static const std::string FILE_MODE;
     unsigned long INDEX_KEY_SIZE = 6;  // Size of an index key entry in bytes
 
-    int dbSize(std::string path);
     void persistNodeIndex();
     std::unordered_map<std::string, unsigned int> readNodeIndex();
     static std::string NODE_DB_PATH;  // Node database file path
@@ -60,11 +59,14 @@ class NodeManager {
     NodeBlock* get(std::string);
     std::list<NodeBlock> getLimitedGraph(int limit = 10);
     std::list<NodeBlock> getGraph();
+    std::list<NodeBlock> getCentralGraph();
 
     RelationBlock *addCentralRelation(NodeBlock source, NodeBlock destination);
 
     RelationBlock *addCentralEdge(std::pair<std::string, std::string> edge);
     void addNodeIndex(std::string nodeId, unsigned int nodeIndex);
+    std::string getDBPrefix();
+    int dbSize(std::string path);
 };
 
 #endif

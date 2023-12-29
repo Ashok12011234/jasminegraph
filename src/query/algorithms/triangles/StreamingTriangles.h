@@ -14,17 +14,17 @@
 
 #include "../../../util/Conts.h"
 #include "../../../localstore/incremental/JasmineGraphIncrementalLocalStore.h"
-
-class JasmineGraphHashMapCentralStore;
-class JasmineGraphHashMapDuplicateCentralStore;
+#include "../../nativestore/RelationBlock.h"
 
 class StreamingTriangles {
 public:
 
     static long run(JasmineGraphIncrementalLocalStore *incrementalLocalStoreInstance);
 
-//    static string countCentralStoreTriangles(map<long, unordered_set<long>> centralStore,
-//                                             map<long, long> distributionMap, int threadPriority);
+    static std::string countCentralStoreStreamingTriangles(std::vector<JasmineGraphIncrementalLocalStore*> incrementalLocalStoreInstances);
+
+    static long countDynamicLocalTriangles(JasmineGraphIncrementalLocalStore *incrementalLocalStoreInstance);
+
 };
 
 #endif //JASMINEGRAPH_STRAMINGTRIANGLES_H

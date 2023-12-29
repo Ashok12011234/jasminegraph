@@ -410,6 +410,23 @@ std::list<NodeBlock> NodeManager::getGraph() {
 }
 
 /**
+ * Return all central nodes
+ * */
+std::list<NodeBlock> NodeManager::getCentralGraph() {
+    std::list<NodeBlock> vertices;
+    for (auto it : this->nodeIndex) {
+        auto nodeId = it.first;
+        NodeBlock *node = this->get(nodeId);
+        if (node->getCentralRelationHead()){
+            vertices.push_back(*node);
+        }
+        node_manager_logger.debug("Read node index for vertice " + nodeId + " with node index " +
+                                  std::to_string(it.second));
+    }
+    return vertices;
+}
+
+/**
  *
  * When closing the node manager,
  * It closes all the open databases and persist the node index in-memory hash map to node index database
@@ -449,6 +466,15 @@ void NodeManager::setIndexKeySize(unsigned long newIndexKeySize) {
 
     this->INDEX_KEY_SIZE = newIndexKeySize;
 }
+
+std::string NodeManager::getDBPrefix(){
+    std::string instanceDataFolderLocation =
+        Utils::getJasmineGraphProperty("org.jasminegraph.server.instance.datafolder");
+    std::string graphPrefix = instanceDataFolderLocation + "/g" + std::to_string(this->graphID);
+    std::string dbPrefix = graphPrefix + "_p" + std::to_string(this->partitionID);
+    return dbPrefix;
+}
+
 unsigned int NodeManager::nextPropertyIndex = 0;
 std::string NodeManager::NODE_DB_PATH = "/home/ubuntu/software/jasminegraph/streamStore/g{}_p{}.db";
 const std::string NodeManager::FILE_MODE = "app";  // for appending to existing DB

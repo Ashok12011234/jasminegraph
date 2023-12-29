@@ -143,6 +143,9 @@ class JasmineGraphInstanceService {
                                                     std::string host);
     static string aggregateCentralStoreTriangles(std::string graphId, std::string partitionId,
                                                  std::string partitionIdList, int threadPriority);
+    static string aggregateStreamingCentralStoreTriangles(std::string graphId, std::string partitionId,
+                                                 std::string partitionIdString, int threadPriority, 
+                                                 std::map<std::string, JasmineGraphIncrementalLocalStore *> incrementalLocalStores);
     static string aggregateCompositeCentralStoreTriangles(std::string compositeFileList, std::string availableFileList,
                                                           int threadPriority);
     static map<long, long> getOutDegreeDistributionHashMap(map<long, unordered_set<long>> graphMap);
