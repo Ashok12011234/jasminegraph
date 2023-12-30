@@ -45,7 +45,13 @@ class NodeManager {
     static unsigned int nextPropertyIndex;  // Next available property block index
     // unless open in wipe data
     // mode(trunc) need to set this value to property db seekp()/BLOCK_SIZE
-    std::string index_db_loc;
+    std::string nodesDBPath;
+    std::string indexDBPath;
+    std::string propertiesDBPath;
+    std::string edgePropertiesDBPath;
+    std::string relationsDBPath;
+    std::string centralRelationsDBPath;
+    
 
     std::unordered_map<std::string, unsigned int> nodeIndex;
 
@@ -67,6 +73,7 @@ class NodeManager {
     void addNodeIndex(std::string nodeId, unsigned int nodeIndex);
     std::string getDBPrefix();
     int dbSize(std::string path);
+    void deleteDBFiles();
 };
 
 #endif

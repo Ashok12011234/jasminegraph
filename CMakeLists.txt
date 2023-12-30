@@ -26,6 +26,7 @@ add_executable(JasmineGraph main.cpp src/server/JasmineGraphServer.cpp src/serve
         src/nativestore/CentralPropertyEdgeLink.cpp
         src/nativestore/RelationBlock.cpp
         src/nativestore/CentralRelationBlock.cpp
+        src/nativestore/CompositeCentralStore.cpp
         src/nativestore/DataPublisher.cpp
         src/partitioner/stream/Partition.cpp
         src/localstore/incremental/JasmineGraphIncrementalLocalStore.cpp

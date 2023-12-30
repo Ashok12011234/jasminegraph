@@ -41,13 +41,19 @@ NodeManager::NodeManager(GraphConfig gConfig) {
         utils.getJasmineGraphProperty("org.jasminegraph.server.instance.datafolder");
     std::string graphPrefix = instanceDataFolderLocation + "/g" + std::to_string(graphID);
     std::string dbPrefix = graphPrefix + "_p" + std::to_string(partitionID);
-    std::string nodesDBPath = dbPrefix + "_nodes.db";
-    this->index_db_loc = dbPrefix + "_nodes.index.db";
+    nodesDBPath = dbPrefix + "_nodes.db";
+    indexDBPath = dbPrefix + "_nodes.index.db";
+    propertiesDBPath = dbPrefix + "_properties.db";
+    edgePropertiesDBPath = dbPrefix + "_edge_properties.db";
+    relationsDBPath = dbPrefix + "_relations.db";
+    centralRelationsDBPath = dbPrefix + "_central_relations.db";
+    //std::string centralPropertiesDBPath = dbPrefix + "_central_properties.db";
+
     // This needs to be set in order to prevent index DB key overflows
     // Expected maximum length of a key in the dataset
 
     node_manager_logger.info("Derived nodesDBPath: " + nodesDBPath);
-    node_manager_logger.info("Derived index_db_loc: " + this->index_db_loc);
+    node_manager_logger.info("Derived index_db_loc: " + indexDBPath);
 
     if (gConfig.maxLabelSize) {
         setIndexKeySize(gConfig.maxLabelSize);
@@ -71,14 +77,14 @@ NodeManager::NodeManager(GraphConfig gConfig) {
 
     NodeBlock::nodesDB = new std::fstream(nodesDBPath, std::ios::in | std::ios::out | openMode | std::ios::binary);
     PropertyLink::propertiesDB =
-        new std::fstream(dbPrefix + "_properties.db", std::ios::in | std::ios::out | openMode | std::ios::binary);
+        new std::fstream(propertiesDBPath, std::ios::in | std::ios::out | openMode | std::ios::binary);
     PropertyEdgeLink::edgePropertiesDB =
-            new std::fstream(dbPrefix + "_edge_properties.db", std::ios::in | std::ios::out | openMode | std::ios::binary);
+            new std::fstream(edgePropertiesDBPath, std::ios::in | std::ios::out | openMode | std::ios::binary);
 
     RelationBlock::relationsDB =
-        new std::fstream(dbPrefix + "_relations.db", std::ios::in | std::ios::out | openMode | std::ios::binary);
+        new std::fstream(relationsDBPath, std::ios::in | std::ios::out | openMode | std::ios::binary);
     RelationBlock::centralrelationsDB =
-            new std::fstream(dbPrefix + "_central_relations.db", std::ios::in | std::ios::out | openMode | std::ios::binary);
+            new std::fstream(centralRelationsDBPath, std::ios::in | std::ios::out | openMode | std::ios::binary);
     //RelationBlock::centralpropertiesDB =
             //new std::fstream(dbPrefix + "_central_relations.db", std::ios::in | std::ios::out | openMode | std::ios::binary);
     // TODO (tmkasun): set PropertyLink nextPropertyIndex after validating by modulus check from file number of bytes
@@ -109,15 +115,15 @@ NodeManager::NodeManager(GraphConfig gConfig) {
 }
 
 std::unordered_map<std::string, unsigned int> NodeManager::readNodeIndex() {
-    std::ifstream index_db(this->index_db_loc, std::ios::app | std::ios::binary);
+    std::ifstream index_db(indexDBPath, std::ios::app | std::ios::binary);
     std::unordered_map<std::string, unsigned int> _nodeIndex;  // temporary node index data holder
 
     if (index_db.is_open()) {
-        int iSize = dbSize(this->index_db_loc);
+        int iSize = dbSize(indexDBPath);
         unsigned long dataWidth = NodeManager::INDEX_KEY_SIZE + sizeof(unsigned int);
         if (iSize % dataWidth != 0) {
-            node_manager_logger.error("Index DB size does not comply to index block size Path = " + this->index_db_loc);
-            throw std::runtime_error("Node index DB in " + this->index_db_loc + " is corrupted!");
+            node_manager_logger.error("Index DB size does not comply to index block size Path = " + indexDBPath);
+            throw std::runtime_error("Node index DB in " + indexDBPath + " is corrupted!");
         }
 
         char nodeIDC[NodeManager::INDEX_KEY_SIZE];
@@ -250,7 +256,7 @@ RelationBlock *NodeManager::addCentralEdge(std::pair<std::string, std::string> e
 void NodeManager::addNodeIndex(std::string nodeId, unsigned int nodeIndex){
     this->nodeIndex.insert({nodeId, this->nextNodeIndex});
 
-    std::ofstream index_db(this->index_db_loc, std::ios::app | std::ios::binary);
+    std::ofstream index_db(indexDBPath, std::ios::app | std::ios::binary);
     if (index_db.is_open()) {
         char nodeIDC[NodeManager::INDEX_KEY_SIZE] = {0};  // Initialize with null chars
         std::strcpy(nodeIDC, nodeId.c_str());
@@ -353,7 +359,7 @@ NodeBlock *NodeManager::get(std::string nodeId) {
 }
 
 void NodeManager::persistNodeIndex() {
-    std::ofstream index_db(this->index_db_loc, std::ios::trunc | std::ios::binary);
+    std::ofstream index_db(indexDBPath, std::ios::trunc | std::ios::binary);
     if (index_db.is_open()) {
         if (this->nodeIndex.size() > 0 && (this->nodeIndex.begin()->first.length() > NodeManager::INDEX_KEY_SIZE)) {
             node_manager_logger.error("Node label/ID is longer ( " +
@@ -452,6 +458,63 @@ void NodeManager::close() {
     }
 }
 
+void NodeManager::deleteDBFiles() {
+    close();
+    // Attempt to delete the file
+    if (std::remove(nodesDBPath.c_str()) != 0) {
+        // Handle deletion failure
+        node_manager_logger.error("Error deleting file: " + nodesDBPath);
+    } else {
+        // Deletion successful
+        node_manager_logger.info("File successfully deleted: " + nodesDBPath);
+    }
+
+    // Attempt to delete the file
+    if (std::remove(indexDBPath.c_str()) != 0) {
+        // Handle deletion failure
+        node_manager_logger.error("Error deleting file: " + indexDBPath);
+    } else {
+        // Deletion successful
+        node_manager_logger.info("File successfully deleted: " + indexDBPath);
+    }
+
+    // Attempt to delete the file
+    if (std::remove(relationsDBPath.c_str()) != 0) {
+        // Handle deletion failure
+        node_manager_logger.error("Error deleting file: " + relationsDBPath);
+    } else {
+        // Deletion successful
+        node_manager_logger.info("File successfully deleted: " + relationsDBPath);
+    }
+
+    // Attempt to delete the file
+    if (std::remove(centralRelationsDBPath.c_str()) != 0) {
+        // Handle deletion failure
+        node_manager_logger.error("Error deleting file: " + centralRelationsDBPath);
+    } else {
+        // Deletion successful
+        node_manager_logger.info("File successfully deleted: " + centralRelationsDBPath);
+    }
+
+    // Attempt to delete the file
+    if (std::remove(propertiesDBPath.c_str()) != 0) {
+        // Handle deletion failure
+        node_manager_logger.error("Error deleting file: " + propertiesDBPath);
+    } else {
+        // Deletion successful
+        node_manager_logger.info("File successfully deleted: " + propertiesDBPath);
+    }
+
+    // Attempt to delete the file
+    if (std::remove(edgePropertiesDBPath.c_str()) != 0) {
+        // Handle deletion failure
+        node_manager_logger.error("Error deleting file: " + edgePropertiesDBPath);
+    } else {
+        // Deletion successful
+        node_manager_logger.info("File successfully deleted: " + edgePropertiesDBPath);
+    }
+
+}
 /**
  *
  * Set the size of node index key size at the run time.

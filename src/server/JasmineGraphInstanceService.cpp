@@ -2953,7 +2953,7 @@ string JasmineGraphInstanceService::aggregateStreamingCentralStoreTriangles(std:
     instance_logger.log("###INSTANCE### Central Store Aggregation : Completed", "info");
 
     std::string triangles =
-            StreamingTriangles::countCentralStoreStreamingTriangles(incrementalLocalStoreInstances);
+            StreamingTriangles::countCentralStoreStreamingTriangles(incrementalLocalStoreInstances, partitionIdList);
 
     return triangles;
 }

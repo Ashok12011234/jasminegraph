@@ -14,16 +14,19 @@
 
 #include "../../../util/Conts.h"
 #include "../../../localstore/incremental/JasmineGraphIncrementalLocalStore.h"
-#include "../../nativestore/RelationBlock.h"
+#include "../../../nativestore/RelationBlock.h"
 
 class StreamingTriangles {
 public:
 
     static long run(JasmineGraphIncrementalLocalStore *incrementalLocalStoreInstance);
 
-    static std::string countCentralStoreStreamingTriangles(std::vector<JasmineGraphIncrementalLocalStore*> incrementalLocalStoreInstances);
+    static std::string countCentralStoreStreamingTriangles(std::vector<JasmineGraphIncrementalLocalStore*> incrementalLocalStoreInstances, std::vector<std::string> partitionIds);
 
     static long countDynamicLocalTriangles(JasmineGraphIncrementalLocalStore *incrementalLocalStoreInstance);
+    static std::string countLocalStreamingTriangles(NodeManager* nodeManager, bool returnTriangles);
+    static std::string countDynamicCentralTriangles(std::vector<std::string> partitionIds);
+
 
 };
 
