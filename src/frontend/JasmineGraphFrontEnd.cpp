@@ -1645,7 +1645,7 @@ static void streaming_triangles_command(std::string masterIP, int connFd, JobSch
             frontend_logger.error("Error writing to socket");
             *loop_exit_p = true;
         }
-        //sleep(25);
+        sleep(25);
     }
 }
 
