@@ -27,7 +27,7 @@ class JobRequest {
     std::chrono::time_point<std::chrono::system_clock> begin;
     std::chrono::time_point<std::chrono::system_clock> end;
 
- public:
+public:
     int priority;
 
     std::string getJobId();

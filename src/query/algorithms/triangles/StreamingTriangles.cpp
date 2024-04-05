@@ -306,9 +306,8 @@ long StreamingTriangles::totalCount(const std::map<long, std::unordered_set<long
                                        std::ref(g1), std::ref(g2), std::ref(edges)));
     countResponse.push_back(std::async(std::launch::async, StreamingTriangles::count,
                                        std::ref(g2), std::ref(g2), std::ref(edges)));
-    long s3 = countResponse[2].get();
-    long s2 = countResponse[1].get();
     long s1 = countResponse[0].get();
-
+    long s2 = countResponse[1].get();
+    long s3 = countResponse[2].get();
     return 0.5 * ((s1 - s2) + (s3 / 3));
 }
