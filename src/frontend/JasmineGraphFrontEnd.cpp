@@ -76,7 +76,8 @@ static void stop_stream_kafka_command(int connFd, KafkaConnector *kstream, bool 
 static void process_dataset_command(int connFd, bool *loop_exit_p);
 static void triangles_command(std::string masterIP, int connFd, SQLiteDBInterface *sqlite,
                               PerformanceSQLiteDBInterface *perfSqlite, JobScheduler *jobScheduler, bool *loop_exit_p);
-static void streaming_triangles_command(std::string masterIP, int connFd, JobScheduler *jobScheduler, bool *loop_exit_p,
+static void streaming_triangles_command(std::string masterIP, int connFd, SQLiteDBInterface *sqlite,
+                                        PerformanceSQLiteDBInterface *perfSqlite, JobScheduler *jobScheduler, bool *loop_exit_p,
                                         int numberOfPartitions, bool *strian_exit);
 static void stop_strian_command(int connFd, bool *strian_exit);
 static void vertex_count_command(int connFd, SQLiteDBInterface *sqlite, bool *loop_exit_p);
@@ -196,7 +197,7 @@ void *frontendservicesesion(void *dummyPt) {
         } else if (line.compare(TRIANGLES) == 0) {
             triangles_command(masterIP, connFd, sqlite, perfSqlite, jobScheduler, &loop_exit);
         } else if (line.compare(STREAMING_TRIANGLES) == 0) {
-            streaming_triangles_command(masterIP, connFd, jobScheduler, &loop_exit,
+            streaming_triangles_command(masterIP, connFd, sqlite, perfSqlite, jobScheduler, &loop_exit,
                                         numberOfPartitions, &JasmineGraphFrontEnd::strian_exit);
         } else if (line.compare(STOP_STRIAN) == 0) {
             stop_strian_command(connFd, &JasmineGraphFrontEnd::strian_exit);
@@ -1487,7 +1488,8 @@ void JasmineGraphFrontEnd::scheduleStrianJobs(JobRequest &jobDetails, std::prior
     }
 }
 
-static void streaming_triangles_command(std::string masterIP, int connFd, JobScheduler *jobScheduler, bool *loop_exit_p,
+static void streaming_triangles_command(std::string masterIP, int connFd, SQLiteDBInterface *sqlite,
+                                        PerformanceSQLiteDBInterface *perfSqlite, JobScheduler *jobScheduler, bool *loop_exit_p,
                                         int numberOfPartitions, bool *strian_exit) {
     int result_wr = write(connFd, GRAPHID_SEND.c_str(), FRONTEND_COMMAND_LENGTH);
     if (result_wr < 0) {
@@ -1539,7 +1541,35 @@ static void streaming_triangles_command(std::string masterIP, int connFd, JobSch
     JobRequest jobDetails;
     jobDetails.setJobType(STREAMING_TRIANGLES);
 
+    long graphSLA;
+    int threadPriority = Conts::HIGH_PRIORITY_DEFAULT_VALUE;
+    graphSLA = JasmineGraphFrontEnd::getSLAForGraphId(sqlite, perfSqlite, graph_id, STREAMING_TRIANGLES,
+                                                          Conts::SLA_CATEGORY::LATENCY);
+    jobDetails.addParameter(Conts::PARAM_KEYS::GRAPH_SLA, std::to_string(graphSLA));
+
+    if (graphSLA == 0) {
+        if (JasmineGraphFrontEnd::areRunningJobsForSameGraph()) {
+            if (canCalibrate) {
+                // initial calibration
+                jobDetails.addParameter(Conts::PARAM_KEYS::AUTO_CALIBRATION, "false");
+            } else {
+                // auto calibration
+                jobDetails.addParameter(Conts::PARAM_KEYS::AUTO_CALIBRATION, "true");
+            }
+        } else {
+            frontend_logger.error("Can't calibrate the graph now");
+        }
+    }
+
+    jobDetails.setPriority(threadPriority);
     jobDetails.setMasterIP(masterIP);
+    jobDetails.addParameter(Conts::PARAM_KEYS::CATEGORY, Conts::SLA_CATEGORY::LATENCY);
+    if (canCalibrate) {
+        jobDetails.addParameter(Conts::PARAM_KEYS::CAN_CALIBRATE, "true");
+    } else {
+        jobDetails.addParameter(Conts::PARAM_KEYS::CAN_CALIBRATE, "false");
+    }
+
     jobDetails.addParameter(Conts::PARAM_KEYS::GRAPH_ID, graph_id);
     jobDetails.addParameter(Conts::PARAM_KEYS::MODE, mode);
     jobDetails.addParameter(Conts::PARAM_KEYS::PARTITION, std::to_string(numberOfPartitions));

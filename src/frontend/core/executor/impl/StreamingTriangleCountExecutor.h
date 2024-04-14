@@ -37,7 +37,7 @@ class StreamingTriangleCountExecutor : public AbstractExecutor{
 
     StreamingTriangleCountExecutor();
 
-        StreamingTriangleCountExecutor(SQLiteDBInterface *db, JobRequest jobRequest);
+        StreamingTriangleCountExecutor(SQLiteDBInterface *db, PerformanceSQLiteDBInterface *perfDb, JobRequest jobRequest);
 
         void execute();
 
@@ -58,6 +58,7 @@ class StreamingTriangleCountExecutor : public AbstractExecutor{
 
  private:
         SQLiteDBInterface *sqlite;
+        PerformanceSQLiteDBInterface *perfDB;
         StreamingSQLiteDBInterface streamingDB;
 };
 

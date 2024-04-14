@@ -26,7 +26,7 @@ AbstractExecutor* ExecutorFactory::getExecutor(JobRequest jobRequest) {
     if (TRIANGLES == jobRequest.getJobType()) {
         return new TriangleCountExecutor(this->sqliteDB, this->perfDB, jobRequest);
     } else if (STREAMING_TRIANGLES == jobRequest.getJobType()) {
-        return new StreamingTriangleCountExecutor(this->sqliteDB, jobRequest);
+        return new StreamingTriangleCountExecutor(this->sqliteDB, this->perfDB, jobRequest);
     } else if (PAGE_RANK == jobRequest.getJobType()) {
         return new PageRankExecutor(this->sqliteDB, this->perfDB, jobRequest);
     }

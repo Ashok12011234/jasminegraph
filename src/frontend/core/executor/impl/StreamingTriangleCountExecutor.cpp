@@ -14,6 +14,7 @@ limitations under the License.
 #include "StreamingTriangleCountExecutor.h"
 
 #define DATA_BUFFER_SIZE (FRONTEND_DATA_LENGTH + 1)
+using namespace std::chrono;
 
 std::map<int, int> StreamingTriangleCountExecutor::local_socket_map; // port:socket
 std::map<int, int> StreamingTriangleCountExecutor::central_socket_map; // port:socket
@@ -31,22 +32,59 @@ NativeStoreTriangleResult retrieveLocalValues(StreamingSQLiteDBInterface stramin
 std::string retrieveCentralValues(StreamingSQLiteDBInterface stramingdb, std::string graphID);
 std::string getCentralRelationCount(StreamingSQLiteDBInterface stramingdb,
                                     std::string graphID, std::string partitionID);
+int getUid();
 
 StreamingTriangleCountExecutor::StreamingTriangleCountExecutor() {}
 
-StreamingTriangleCountExecutor::StreamingTriangleCountExecutor(SQLiteDBInterface *db, JobRequest jobRequest) {
+StreamingTriangleCountExecutor::StreamingTriangleCountExecutor(SQLiteDBInterface *db, PerformanceSQLiteDBInterface *perfDb,
+                                                               JobRequest jobRequest) {
     this->sqlite = db;
+    this->perfDB = perfDb;
     this->request = jobRequest;
     streamingDB = *new StreamingSQLiteDBInterface();
 }
 
 void StreamingTriangleCountExecutor::execute() {
+    int uniqueId = getUid();
     std::string masterIP = request.getMasterIP();
     std::string graphId = request.getParameter(Conts::PARAM_KEYS::GRAPH_ID);
+    std::string canCalibrateString = request.getParameter(Conts::PARAM_KEYS::CAN_CALIBRATE);
+    std::string queueTime = request.getParameter(Conts::PARAM_KEYS::QUEUE_TIME);
+    std::string graphSLAString = request.getParameter(Conts::PARAM_KEYS::GRAPH_SLA);
     std::string mode = request.getParameter(Conts::PARAM_KEYS::MODE);
     std::string partitions = request.getParameter(Conts::PARAM_KEYS::PARTITION);
 
     streamingDB.init();
+    bool canCalibrate = Utils::parseBoolean(canCalibrateString);
+    int threadPriority = request.getPriority();
+    std::string autoCalibrateString = request.getParameter(Conts::PARAM_KEYS::AUTO_CALIBRATION);
+    bool autoCalibrate = false;//Utils::parseBoolean(autoCalibrateString);
+
+    if (threadPriority == Conts::HIGH_PRIORITY_DEFAULT_VALUE) {
+        highPriorityGraphList.push_back(graphId);
+    }
+
+    // Below code is used to update the process details
+    processStatusMutex.lock();
+    std::chrono::milliseconds startTime = duration_cast<milliseconds>(system_clock::now().time_since_epoch());
+
+    struct ProcessInfo processInformation;
+    processInformation.id = uniqueId;
+    processInformation.graphId = graphId;
+    processInformation.processName = STREAMING_TRIANGLES;
+    processInformation.priority = threadPriority;
+    processInformation.startTimestamp = startTime.count();
+
+    if (!queueTime.empty()) {
+        long sleepTime = atol(queueTime.c_str());
+        processInformation.sleepTime = sleepTime;
+        processData.insert(processInformation);
+        processStatusMutex.unlock();
+        std::this_thread::sleep_for(std::chrono::milliseconds(sleepTime));
+    } else {
+        processData.insert(processInformation);
+        processStatusMutex.unlock();
+    }
 
     streaming_triangleCount_logger.info(
             "###STREAMING-TRIANGLE-COUNT-EXECUTOR### Started with graph ID : " + graphId +
@@ -55,6 +93,7 @@ void StreamingTriangleCountExecutor::execute() {
     vector<Utils::worker> workerList = Utils::getWorkerList(sqlite);
     int partitionCount = stoi(partitions);
     std::vector<std::future<long>> intermRes;
+    std::vector<std::future<int>> statResponse;
     long result = 0;
 
     streaming_triangleCount_logger.info("###STREAMING-TRIANGLE-COUNT-EXECUTOR### Completed central store counting");
@@ -69,6 +108,34 @@ void StreamingTriangleCountExecutor::execute() {
         intermRes.push_back(std::async(
                 std::launch::async, StreamingTriangleCountExecutor::getTriangleCount, atoi(graphId.c_str()),
                 host, workerPort, workerDataPort, i, masterIP, mode, streamingDB));
+    }
+
+    PerformanceUtil::init();
+
+    std::string query =
+            "SELECT attempt from graph_sla INNER JOIN sla_category where graph_sla.id_sla_category=sla_category.id and "
+            "graph_sla.graph_id='" +
+            graphId + "' and graph_sla.partition_count='" + std::to_string(partitionCount) +
+            "' and sla_category.category='" + Conts::SLA_CATEGORY::LATENCY +
+            "' and sla_category.command='" + PAGE_RANK + "';";
+
+    std::vector<vector<pair<string, string>>> queryResults = perfDB->runSelect(query);
+
+    if (false) {  // (queryResults.size() > 0) {
+        std::string attemptString = queryResults[0][0].second;
+        int calibratedAttempts = atoi(attemptString.c_str());
+
+        if (calibratedAttempts >= Conts::MAX_SLA_CALIBRATE_ATTEMPTS) {
+            canCalibrate = false;
+        }
+    } else {
+        streaming_triangleCount_logger.info("###STREAMING-TRIANGLE-COUNT-EXECUTOR### Inserting initial record for SLA ");
+        Utils::updateSLAInformation(perfDB, graphId, partitionCount, 0,
+                                    STREAMING_TRIANGLES, Conts::SLA_CATEGORY::LATENCY);
+        statResponse.push_back(std::async(std::launch::async, collectPerformaceData, perfDB,
+                                          graphId.c_str(), PAGE_RANK, Conts::SLA_CATEGORY::LATENCY, partitionCount,
+                                          masterIP, autoCalibrate));
+        isStatCollect = true;
     }
 
     if (partitionCount > 2) {
@@ -93,14 +160,36 @@ void StreamingTriangleCountExecutor::execute() {
     streaming_triangleCount_logger.info(
             "###STREAMING-TRIANGLE-COUNT-EXECUTOR### Getting Triangle Count : Completed: Triangles " +
             to_string(result));
+    auto end = chrono::high_resolution_clock::now();
 
+    workerResponded = true;
     JobResponse jobResponse;
     jobResponse.setJobId(request.getJobId());
     jobResponse.addParameter(Conts::PARAM_KEYS::STREAMING_TRIANGLE_COUNT, std::to_string(result));
-    jobResponse.setEndTime(chrono::high_resolution_clock::now());
+    jobResponse.setEndTime(end);
     responseVector.push_back(jobResponse);
 
     responseMap[request.getJobId()] = jobResponse;
+    auto dur = end - request.getBegin();
+    auto msDuration = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
+    if (canCalibrate || autoCalibrate) {
+        Utils::updateSLAInformation(perfDB, graphId, partitionCount, msDuration, PAGE_RANK,
+                                    Conts::SLA_CATEGORY::LATENCY);
+        isStatCollect = false;
+    }
+
+    processStatusMutex.lock();
+    std::set<ProcessInfo>::iterator processCompleteIterator;
+    for (processCompleteIterator = processData.begin(); processCompleteIterator != processData.end();
+         ++processCompleteIterator) {
+        ProcessInfo processInformation = *processCompleteIterator;
+
+        if (processInformation.id == uniqueId) {
+            processData.erase(processInformation);
+            break;
+        }
+    }
+    processStatusMutex.unlock();
 }
 
 long StreamingTriangleCountExecutor::getTriangleCount(int graphId, std::string host, int port,
@@ -694,4 +783,9 @@ std::string getCentralRelationCount(StreamingSQLiteDBInterface sqlite, std::stri
     std::string count = aggregatorData.at(0).second;
 
     return count;
+}
+
+int getUid() {
+    static std::atomic<std::uint32_t> uid{0};
+    return ++uid;
 }
