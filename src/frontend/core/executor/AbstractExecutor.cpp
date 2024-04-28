@@ -15,6 +15,8 @@ limitations under the License.
 
 #include "../../../performance/metrics/PerformanceUtil.h"
 
+extern std::map<std::string, std::vector<ResourceUsageInfo>> resourceUsageMap;
+
 AbstractExecutor::AbstractExecutor(JobRequest jobRequest) { this->request = jobRequest; }
 
 AbstractExecutor::AbstractExecutor() {}
@@ -93,6 +95,14 @@ int AbstractExecutor::collectPerformaceData(PerformanceSQLiteDBInterface *perDB,
     }
 
     start = time(0);
+
+    std::vector<ResourceUsageInfo> resourceUsageVector;
+    for (placeListIterator = placeList.begin(); placeListIterator != placeList.end(); ++placeListIterator) {
+        Place place = *placeListIterator;
+        std::string placeId = place.placeId;
+        resourceUsageMap[placeId] = resourceUsageVector;
+    }
+
     PerformanceUtil::collectSLAResourceConsumption(placeList, graphId, command, category, masterIP, elapsedTime,
                                                    autoCalibrate);
 

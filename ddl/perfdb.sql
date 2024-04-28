@@ -19,6 +19,28 @@ create table graph_place_sla_performance
     elapsed_time INTEGER
 );
 
+create table streaming_performance
+(
+    id           INTEGER not null
+        primary key AUTOINCREMENT,
+    graph_id INTEGER not null,
+    local_edges0     INTEGER not null,
+    central_edges0 INTEGER,
+    local_triangles0 INTEGER,
+    local_edges1     INTEGER not null,
+    central_edges1 INTEGER,
+    local_triangles1 INTEGER,
+    local_edges2     INTEGER not null,
+    central_edges2 INTEGER,
+    local_triangles2 INTEGER,
+    local_edges3     INTEGER not null,
+    central_edges3 INTEGER,
+    local_triangles3 INTEGER,
+    total_triangles INTEGER,
+    duration INTEGER,
+    time_stamp        TEXT
+);
+
 create table graph_sla
 (
     id              INTEGER not null

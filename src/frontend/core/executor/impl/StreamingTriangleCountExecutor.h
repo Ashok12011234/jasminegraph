@@ -27,11 +27,22 @@ limitations under the License.
 #include "../../CoreConstants.h"
 #include "../AbstractExecutor.h"
 
+struct StreamingSnap{
+    std::string graph_id;
+    std::string local_edges[4];
+    std::string central_edges[4];
+    std::string local_triangles[4];
+    std::string total_triangles;
+    std::string duration;
+    std::string time_stamp;
+};
+
 class StreamingTriangleCountExecutor : public AbstractExecutor{
  public:
     static std::map<int, int> local_socket_map; // port:socket
     static std::map<int, int> central_socket_map; // port:socket
 
+    static StreamingSnap streamingSnap;
     static std::unordered_map<long, std::unordered_map<long, std::unordered_set<long>>> triangleTree;
     static long triangleCount;
 

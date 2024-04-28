@@ -83,6 +83,8 @@ class JasmineGraphFrontEnd {
     static bool strian_exit;
     std::map<std::string, std::atomic<bool>> *streamsState;
     std::map<std::string, std::thread> streamingThreads;
+    static void record_load_average(string masterIP, PerformanceSQLiteDBInterface *perDB, int numberOfPartitions, bool *strian_exit,
+                        string graphId);
 
  private:
     SQLiteDBInterface *sqlite;

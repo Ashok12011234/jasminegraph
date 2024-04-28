@@ -24,6 +24,7 @@ limitations under the License.
 #include "../../../util/logger/Logger.h"
 #include "../domain/JobRequest.h"
 #include "../domain/JobResponse.h"
+#include "../../../util/Conts.h"
 
 using namespace std;
 

@@ -23,6 +23,7 @@ Logger streaming_triangleCount_logger;
 std::unordered_map<long, std::unordered_map<long, std::unordered_set<long>>>
         StreamingTriangleCountExecutor::triangleTree;
 long StreamingTriangleCountExecutor::triangleCount;
+StreamingSnap StreamingTriangleCountExecutor::streamingSnap;
 
 void saveLocalValues(StreamingSQLiteDBInterface stramingdb, std::string graphID, std::string partitionID,
                       NativeStoreTriangleResult result);
@@ -32,6 +33,9 @@ NativeStoreTriangleResult retrieveLocalValues(StreamingSQLiteDBInterface stramin
 std::string retrieveCentralValues(StreamingSQLiteDBInterface stramingdb, std::string graphID);
 std::string getCentralRelationCount(StreamingSQLiteDBInterface stramingdb,
                                     std::string graphID, std::string partitionID);
+
+void streaming_snaps(PerformanceSQLiteDBInterface* perf, StreamingSnap snap);
+
 int getUid();
 
 StreamingTriangleCountExecutor::StreamingTriangleCountExecutor() {}
@@ -45,6 +49,7 @@ StreamingTriangleCountExecutor::StreamingTriangleCountExecutor(SQLiteDBInterface
 }
 
 void StreamingTriangleCountExecutor::execute() {
+    workerResponded = false;
     int uniqueId = getUid();
     std::string masterIP = request.getMasterIP();
     std::string graphId = request.getParameter(Conts::PARAM_KEYS::GRAPH_ID);
@@ -121,7 +126,7 @@ void StreamingTriangleCountExecutor::execute() {
 
     std::vector<vector<pair<string, string>>> queryResults = perfDB->runSelect(query);
 
-    if (false) {  // (queryResults.size() > 0) {
+    if ((queryResults.size() > 0) && false) {
         std::string attemptString = queryResults[0][0].second;
         int calibratedAttempts = atoi(attemptString.c_str());
 
@@ -172,6 +177,13 @@ void StreamingTriangleCountExecutor::execute() {
     responseMap[request.getJobId()] = jobResponse;
     auto dur = end - request.getBegin();
     auto msDuration = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
+    streamingSnap.duration = std::to_string(msDuration);
+    streamingSnap.total_triangles = to_string(result);
+    streamingSnap.graph_id = graphId;
+    std::time_t end_time_t = std::chrono::system_clock::to_time_t(end);
+    std::string s = std::ctime(&end_time_t);
+    streamingSnap.time_stamp = "11";
+    streaming_snaps(perfDB, streamingSnap);
     if (canCalibrate || autoCalibrate) {
         Utils::updateSLAInformation(perfDB, graphId, partitionCount, msDuration, PAGE_RANK,
                                     Conts::SLA_CATEGORY::LATENCY);
@@ -343,6 +355,7 @@ long StreamingTriangleCountExecutor::getTriangleCount(int graphId, std::string h
     streaming_triangleCount_logger.info("Sent :  mode " + runMode);
 
     string local_relation_count = Utils::read_str_trim_wrapper(sockfd, data, INSTANCE_DATA_LENGTH);
+    streamingSnap.local_edges[partitionId] = local_relation_count;
     streaming_triangleCount_logger.info("Received Local relation count: " + local_relation_count);
 
     if (!Utils::send_str_wrapper(sockfd, JasmineGraphInstanceProtocol::OK)) {
@@ -351,6 +364,7 @@ long StreamingTriangleCountExecutor::getTriangleCount(int graphId, std::string h
     }
 
     string central_relation_count = Utils::read_str_trim_wrapper(sockfd, data, INSTANCE_DATA_LENGTH);
+    streamingSnap.central_edges[partitionId] = central_relation_count;
     streaming_triangleCount_logger.info("Received Central relation count: " + central_relation_count);
 
     if (!Utils::send_str_wrapper(sockfd, JasmineGraphInstanceProtocol::OK)) {
@@ -359,6 +373,7 @@ long StreamingTriangleCountExecutor::getTriangleCount(int graphId, std::string h
     }
 
     string triangles = Utils::read_str_trim_wrapper(sockfd, data, INSTANCE_DATA_LENGTH);
+    streamingSnap.local_triangles[partitionId] = triangles;
     streaming_triangleCount_logger.info("Received result: " + triangles);
 
     NativeStoreTriangleResult newResult{ std::stol(local_relation_count),
@@ -788,4 +803,35 @@ std::string getCentralRelationCount(StreamingSQLiteDBInterface sqlite, std::stri
 int getUid() {
     static std::atomic<std::uint32_t> uid{0};
     return ++uid;
+}
+
+void streaming_snaps(PerformanceSQLiteDBInterface* perf, StreamingSnap snap) {
+    // Row doesn't exist, insert a new row
+    std::string insertQuery = "INSERT into streaming_performance (graph_id,local_edges0,central_edges0,local_triangles0,"
+                              "local_edges1,central_edges1,local_triangles1,"
+                              "local_edges2,central_edges2,local_triangles2,"
+                              "local_edges3,central_edges3,local_triangles3,"
+                              "total_triangles,duration,time_stamp) VALUES ("
+                              + snap.graph_id + ", "
+                              + snap.local_edges[0] + ", "
+                              + snap.central_edges[0] + ", "
+                              + snap.local_triangles[0] + ", "
+                              + snap.local_edges[1] + ", "
+                              + snap.central_edges[1] + ", "
+                              + snap.local_triangles[1] + ", "
+                              + snap.local_edges[2] + ", "
+                              + snap.central_edges[2] + ", "
+                              + snap.local_triangles[2] + ", "
+                              + snap.local_edges[3] + ", "
+                              + snap.central_edges[3] + ", "
+                              + snap.local_triangles[3] + ", "
+                              + snap.total_triangles + ", "
+                              + snap.duration + ", "
+                              + snap.time_stamp + ")";
+
+    int newGraphID = perf->runInsert(insertQuery);
+
+    if (newGraphID == -1) {
+        streaming_triangleCount_logger.error("Streaming local values insertion failed.");
+    }
 }

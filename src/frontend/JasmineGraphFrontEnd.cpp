@@ -1488,6 +1488,75 @@ void JasmineGraphFrontEnd::scheduleStrianJobs(JobRequest &jobDetails, std::prior
     }
 }
 
+void JasmineGraphFrontEnd::record_load_average(std::string masterIP, PerformanceSQLiteDBInterface *perDB,
+                         int numberOfPartitions, bool *strian_exit, std::string graphId) {
+
+    int elapsedTime = 0;
+    time_t start;
+    time_t end;
+    PerformanceUtil::init();
+
+    std::vector<Place> placeList = PerformanceUtil::getHostReporterList();
+    std::string slaCategoryId = PerformanceUtil::getSLACategoryId(PAGE_RANK, Conts::SLA_CATEGORY::LATENCY);
+
+    std::vector<Place>::iterator placeListIterator;
+
+    for (placeListIterator = placeList.begin(); placeListIterator != placeList.end(); ++placeListIterator) {
+        Place place = *placeListIterator;
+        std::string host;
+
+        std::string ip = place.ip;
+        std::string user = place.user;
+        std::string serverPort = place.serverPort;
+        std::string isMaster = place.isMaster;
+        std::string isHostReporter = place.isHostReporter;
+        std::string hostId = place.hostId;
+        std::string placeId = place.placeId;
+
+        if (ip.find("localhost") != std::string::npos || ip.compare(masterIP) == 0) {
+            host = ip;
+        } else {
+            host = user + "@" + ip;
+        }
+
+        if (!(isMaster.find("true") != std::string::npos || host == "localhost" || host.compare(masterIP) == 0)) {
+            PerformanceUtil::initiateCollectingRemoteSLAResourceUtilization(
+                    host, atoi(serverPort.c_str()), isHostReporter, "false",
+                    placeId, elapsedTime, masterIP);
+        }
+    }
+
+    start = time(0);
+
+    std::vector<ResourceUsageInfo> resourceUsageVector;
+    for (placeListIterator = placeList.begin(); placeListIterator != placeList.end(); ++placeListIterator) {
+        Place place = *placeListIterator;
+        std::string placeId = place.placeId;
+        resourceUsageMap[placeId] = resourceUsageVector;
+    }
+
+    PerformanceUtil::collectSLAResourceConsumption(placeList, graphId, PAGE_RANK, Conts::SLA_CATEGORY::LATENCY,
+                                                   masterIP, elapsedTime,
+                                                   false);
+
+    while (! (*strian_exit)) {
+        time_t elapsed = time(0) - start;
+        if (elapsed >= Conts::LOAD_AVG_COLLECTING_GAP) {
+            elapsedTime += Conts::LOAD_AVG_COLLECTING_GAP * 1000;
+            PerformanceUtil::collectSLAResourceConsumption(placeList, graphId, PAGE_RANK, Conts::SLA_CATEGORY::LATENCY,
+                                                           masterIP, elapsedTime,
+                                                           false);
+            start = start + Conts::LOAD_AVG_COLLECTING_GAP;
+        } else {
+            sleep(Conts::LOAD_AVG_COLLECTING_GAP - elapsed);
+        }
+    }
+
+    PerformanceUtil::updateRemoteResourceConsumption(perDB, graphId, numberOfPartitions, placeList,
+                                                     slaCategoryId, masterIP);
+    PerformanceUtil::updateResourceConsumption(perDB, graphId, numberOfPartitions, placeList, slaCategoryId);
+}
+
 static void streaming_triangles_command(std::string masterIP, int connFd, SQLiteDBInterface *sqlite,
                                         PerformanceSQLiteDBInterface *perfSqlite, JobScheduler *jobScheduler, bool *loop_exit_p,
                                         int numberOfPartitions, bool *strian_exit) {
