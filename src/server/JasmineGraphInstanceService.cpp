@@ -167,7 +167,7 @@ void *instanceservicesession(void *dummyPt) {
             continue;
         }
         line = Utils::trim_copy(line);
-        instance_logger.info("Received : " + line);
+        //instance_logger.info("Received : " + line);
 
         if (line.compare(JasmineGraphInstanceProtocol::HANDSHAKE) == 0) {
             handshake_command(connFd, &loop_exit);

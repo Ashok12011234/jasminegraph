@@ -137,9 +137,9 @@ void StreamingTriangleCountExecutor::execute() {
         streaming_triangleCount_logger.info("###STREAMING-TRIANGLE-COUNT-EXECUTOR### Inserting initial record for SLA ");
         Utils::updateSLAInformation(perfDB, graphId, partitionCount, 0,
                                     STREAMING_TRIANGLES, Conts::SLA_CATEGORY::LATENCY);
-        statResponse.push_back(std::async(std::launch::async, collectPerformaceData, perfDB,
-                                          graphId.c_str(), PAGE_RANK, Conts::SLA_CATEGORY::LATENCY, partitionCount,
-                                          masterIP, autoCalibrate));
+//        statResponse.push_back(std::async(std::launch::async, collectPerformaceData, perfDB,
+//                                          graphId.c_str(), PAGE_RANK, Conts::SLA_CATEGORY::LATENCY, partitionCount,
+//                                          masterIP, autoCalibrate));
         isStatCollect = true;
     }
 
