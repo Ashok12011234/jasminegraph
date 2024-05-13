@@ -239,7 +239,7 @@ std::string StreamingTriangles::countDynamicCentralTriangles(
     for (const auto& edge : edges) {
         long u = edge.first;
         long v = edge.second;
-
+        count += adjacencyList[u].size();
         for (auto w : adjacencyList[u]) {
             if (adjacencyList[v].find(w) != adjacencyList[v].end()) {
                     long varOne = u;
@@ -261,10 +261,11 @@ std::string StreamingTriangles::countDynamicCentralTriangles(
                         varTwo ^= varThree;
                     }
                     triangleStream << varOne << "," << varTwo << "," << varThree << ":";
-                    count++;
+
             }
         }
     }
+    streaming_triangle_logger.error("degree count : " + std::to_string(count));
     streaming_triangle_logger.info("###STREAMING TRIANGLE### Dynamic Streaming Central Triangle "
                                   "Counting: Finished");
     string triangle = triangleStream.str();

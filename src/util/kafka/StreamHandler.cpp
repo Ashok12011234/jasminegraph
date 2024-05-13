@@ -17,6 +17,7 @@ limitations under the License.
 #include <nlohmann/json.hpp>
 #include <string>
 #include <stdlib.h>
+#include <thread>
 
 #include "../logger/Logger.h"
 #include "../Utils.h"
@@ -58,11 +59,13 @@ bool StreamHandler::isEndOfStream(const cppkafka::Message &msg) {
 
 void StreamHandler::listen_to_kafka_topic() {
     while (true) {
+        //std::this_thread::sleep_for(std::chrono::microseconds(1000));
+        auto start_time = std::chrono::high_resolution_clock::now();
         cppkafka::Message msg = this->pollMessage();
 
         if (this->isEndOfStream(msg)) {
             frontend_logger.info("Received the end of `" + stream_topic_name + "` input kafka stream");
-            for (auto &workerClient : workerClients) {
+            for (auto &workerClient: workerClients) {
                 if (workerClient != nullptr) {
                     workerClient->publish("-1");
                 }
@@ -71,7 +74,6 @@ void StreamHandler::listen_to_kafka_topic() {
         }
 
         if (this->isErrorInMessage(msg)) {
-            frontend_logger.log("Couldn't retrieve message from Kafka.", "info");
             continue;
         }
 
@@ -113,7 +115,49 @@ void StreamHandler::listen_to_kafka_topic() {
             obj["PID"] = part_d;
             workerClients.at(temp_d)->publish(obj.dump());
         }
-    }
 
-    graphPartitioner.printStats();
+        //graphPartitioner.printStats();
+
+        auto end_time = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end_time - start_time);
+        //stream_handler_logger.info("Duration " + std::to_string(duration.count()));
+
+        // Sleep for the remaining time to maintain the data rate
+        if ((dataRate != 0) && (duration.count() < (1000000000 / dataRate)) && isConstrained) {
+            int remainingTime = static_cast<int>((1000000000.0 / dataRate) - duration.count()); // Round to nearest integer
+            std::this_thread::sleep_for(std::chrono::nanoseconds (remainingTime));
+            //sleep(remainingTime);
+        } else {
+            if (duration.count() != 0) {
+                dataRate = static_cast<int>(1000000000 / duration.count()); // Correct data rate assignment (find data rate for last second and assign it correctly)
+            } else {
+                dataRate = 1000000000; // Default data rate if duration.count() is zero
+            }
+            isConstrained = false;
+        }
+        //stream_handler_logger.info("Data rate: " + std::to_string(dataRate));
+
+    }
+}
+
+int StreamHandler::getDataRate() {
+    return this->dataRate;
+}
+
+void StreamHandler::setDataRate(int dataRate) {
+    this->dataRate = dataRate;
+    isConstrained = true;
+}
+
+void StreamHandler::changeDataRate(float percentage) {
+    this->dataRate += (int) (dataRate * percentage);
+    isConstrained = true;
+}
+
+bool StreamHandler::getConstrained() {
+    return isConstrained;
+}
+
+void StreamHandler::setConstrained(bool isConstrained) {
+    this->isConstrained = isConstrained;
 }

@@ -40,7 +40,6 @@ limitations under the License.
 #include "../server/JasmineGraphServer.h"
 #include "../util/Conts.h"
 #include "../util/kafka/KafkaCC.h"
-#include "../util/kafka/StreamHandler.h"
 #include "../util/logger/Logger.h"
 #include "JasmineGraphFrontEndProtocol.h"
 #include "core/CoreConstants.h"
@@ -61,6 +60,8 @@ Logger frontend_logger;
 std::set<ProcessInfo> processData;
 std::string stream_topic_name;
 bool JasmineGraphFrontEnd::strian_exit;
+StreamHandler* JasmineGraphFrontEnd::stream_handler;
+std::tuple<int, long> lastResult;
 
 static std::string getPartitionCount(std::string path);
 static void list_command(int connFd, SQLiteDBInterface *sqlite, bool *loop_exit_p);
@@ -73,6 +74,8 @@ static void add_stream_kafka_command(int connFd, std::string &kafka_server_IP, c
                                      KafkaConnector *&kstream, thread &input_stream_handler_thread,
                                      vector<DataPublisher *> &workerClients, int numberOfPartitions, bool *loop_exit_p);
 static void stop_stream_kafka_command(int connFd, KafkaConnector *kstream, bool *loop_exit_p);
+static void set_data_rate(int connFd, bool *loop_exit_p);
+static void get_data_rate(int connFd, bool *loop_exit_p);
 static void process_dataset_command(int connFd, bool *loop_exit_p);
 static void triangles_command(std::string masterIP, int connFd, SQLiteDBInterface *sqlite,
                               PerformanceSQLiteDBInterface *perfSqlite, JobScheduler *jobScheduler, bool *loop_exit_p);
@@ -190,7 +193,11 @@ void *frontendservicesesion(void *dummyPt) {
                                      numberOfPartitions, &loop_exit);
         } else if (line.compare(STOP_STREAM_KAFKA) == 0) {
             stop_stream_kafka_command(connFd, kstream, &loop_exit);
-        } else if (line.compare(RMGR) == 0) {
+        }  else if (line.compare("set") == 0) {
+            set_data_rate(connFd, &loop_exit);
+        }  else if (line.compare("get") == 0) {
+            get_data_rate(connFd, &loop_exit);
+        }  else if (line.compare(RMGR) == 0) {
             remove_graph_command(masterIP, connFd, sqlite, &loop_exit);
         } else if (line.compare(PROCESS_DATASET) == 0) {
             process_dataset_command(connFd, &loop_exit);
@@ -1234,10 +1241,10 @@ static void add_stream_kafka_command(int connFd, std::string &kafka_server_IP, c
     // Subscribe to the Kafka topic.
     kstream->Subscribe(topic_name_s);
     // Create the StreamHandler object.
-    StreamHandler *stream_handler = new StreamHandler(kstream, numberOfPartitions, workerClients);
+    JasmineGraphFrontEnd::stream_handler = new StreamHandler(kstream, numberOfPartitions, workerClients);
 
     frontend_logger.info("Start listening to " + topic_name_s);
-    input_stream_handler_thread = thread(&StreamHandler::listen_to_kafka_topic, stream_handler);
+    input_stream_handler_thread = thread(&StreamHandler::listen_to_kafka_topic, JasmineGraphFrontEnd::stream_handler);
 }
 
 static void stop_stream_kafka_command(int connFd, KafkaConnector *kstream, bool *loop_exit_p) {
@@ -1257,6 +1264,58 @@ static void stop_stream_kafka_command(int connFd, KafkaConnector *kstream, bool 
         frontend_logger.error("Error writing to socket");
         *loop_exit_p = true;
     }
+}
+
+static void set_data_rate(int connFd, bool *loop_exit_p) {
+    int uniqueId = JasmineGraphFrontEnd::getUid();
+    int result_wr = write(connFd, "send", FRONTEND_COMMAND_LENGTH);
+    if (result_wr < 0) {
+        frontend_logger.error("Error writing to socket");
+        *loop_exit_p = true;
+        return;
+    }
+    result_wr = write(connFd, "\r\n", 2);
+    if (result_wr < 0) {
+        frontend_logger.error("Error writing to socket");
+        *loop_exit_p = true;
+        return;
+    }
+
+    // We get the name and the path to graph as a pair separated by |.
+    char graph_id_data[301];
+    bzero(graph_id_data, 301);
+    string name = "";
+
+    read(connFd, graph_id_data, 300);
+
+    string graph_id(graph_id_data);
+    graph_id.erase(std::remove(graph_id.begin(), graph_id.end(), '\n'), graph_id.end());
+    graph_id.erase(std::remove(graph_id.begin(), graph_id.end(), '\r'), graph_id.end());
+
+    JasmineGraphFrontEnd::stream_handler->setDataRate(stoi(graph_id));
+    JasmineGraphFrontEnd::stream_handler->setConstrained(true);
+}
+
+static void get_data_rate(int connFd, bool *loop_exit_p) {
+
+    int result_wr;
+    std::string out;
+    while (true) {
+        int dataRate = JasmineGraphFrontEnd::stream_handler->getDataRate();
+        out = std::to_string (dataRate);
+        result_wr = write(connFd, out.c_str(), out.length());
+        if (result_wr < 0) {
+            frontend_logger.error("Error writing to socket");
+            *loop_exit_p = true;
+            return;
+        }
+        result_wr = write(connFd, Conts::CARRIAGE_RETURN_NEW_LINE.c_str(), Conts::CARRIAGE_RETURN_NEW_LINE.size());
+        if (result_wr < 0) {
+            frontend_logger.error("Error writing to socket");
+            *loop_exit_p = true;
+        }
+    }
+    sleep(10);
 }
 
 static void process_dataset_command(int connFd, bool *loop_exit_p) {
@@ -1485,6 +1544,24 @@ void JasmineGraphFrontEnd::scheduleStrianJobs(JobRequest &jobDetails, std::prior
         jobQueue.push(jobDetails);
         jobScheduler->pushJob(jobDetails);
         sleep(Conts::STREAMING_STRAIN_GAP);
+
+        int currentDataRate = JasmineGraphFrontEnd::stream_handler->getDataRate();
+        auto [jobID, duration] = lastResult;
+
+        while (jobID != uniqueId) {
+            JasmineGraphFrontEnd::stream_handler->setDataRate(1);
+            jobID = get<0>(lastResult);
+            duration = get<1>(lastResult);
+        }
+
+        int lastExecutionTime = (int) (duration / 1000); //get it using uniqueID. can use std::optional
+
+        // Adjust data rate based on the difference from the target execution time
+        float diff = Conts::STREAMING_STRAIN_GAP - lastExecutionTime;
+        float percentage = diff * 0.1; // Example adjustment factor
+        //JasmineGraphFrontEnd::stream_handler->changeDataRate(percentage);
+        //JasmineGraphFrontEnd::stream_handler->setConstrained(false);
+        JasmineGraphFrontEnd::stream_handler->setDataRate(abs(currentDataRate * percentage));
     }
 }
 
@@ -1647,59 +1724,66 @@ static void streaming_triangles_command(std::string masterIP, int connFd, SQLite
         *strian_exit = false;
     }
 
-    std::thread* loadAverageThread;
-    if (graph_id == "0") {
-        loadAverageThread = new std::thread(JasmineGraphFrontEnd::record_load_average, masterIP, std::ref(perfSqlite), numberOfPartitions,
-                                      std::ref(strian_exit), graph_id);
-    }
+//    std::thread* loadAverageThread;
+//    if (graph_id == "0") {
+//        loadAverageThread = new std::thread(JasmineGraphFrontEnd::record_load_average, masterIP, std::ref(perfSqlite), numberOfPartitions,
+//                                      std::ref(strian_exit), graph_id);
+//    }
+
+    std::thread schedulerThread(JasmineGraphFrontEnd::scheduleStrianJobs, std::ref(jobDetails), std::ref(jobQueue),
+                                jobScheduler, std::ref(strian_exit));
 
     while (!(*strian_exit)) {
-        auto begin = chrono::high_resolution_clock::now();
-        int uniqueId = JasmineGraphFrontEnd::getUid();
-        jobDetails.setBeginTime(begin);
-        jobDetails.setJobId(std::to_string(uniqueId));
-        jobScheduler->pushJob(jobDetails);
-        JobResponse jobResponse = jobScheduler->getResult(jobDetails);
-        std::string errorMessage = jobResponse.getParameter(Conts::PARAM_KEYS::ERROR_MESSAGE);
+        if (!jobQueue.empty()) {
+            JobRequest request = jobQueue.top();
+            JobResponse jobResponse = jobScheduler->getResult(request);
+            std::string errorMessage = jobResponse.getParameter(Conts::PARAM_KEYS::ERROR_MESSAGE);
 
-        if (!errorMessage.empty()) {
-            *loop_exit_p = true;
-            result_wr = write(connFd, errorMessage.c_str(), errorMessage.length());
+            if (!errorMessage.empty()) {
+                *loop_exit_p = true;
+                result_wr = write(connFd, errorMessage.c_str(), errorMessage.length());
 
+                if (result_wr < 0) {
+                    frontend_logger.error("Error writing to socket");
+                    return;
+                }
+                result_wr = write(connFd, Conts::CARRIAGE_RETURN_NEW_LINE.c_str(),
+                                  Conts::CARRIAGE_RETURN_NEW_LINE.size());
+                if (result_wr < 0) {
+                    frontend_logger.error("Error writing to socket");
+                }
+                return;
+            }
+            std::string triangleCount = jobResponse.getParameter(Conts::PARAM_KEYS::STREAMING_TRIANGLE_COUNT);
+            std::time_t begin_time_t = std::chrono::system_clock::to_time_t(request.getBegin());
+            std::time_t end_time_t = std::chrono::system_clock::to_time_t(jobResponse.getEndTime());
+            auto dur = jobResponse.getEndTime() - request.getBegin();
+            auto msDuration = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
+            lastResult = std::make_tuple(std::stoi(jobResponse.getJobId()), msDuration);
+            frontend_logger.info("Streaming triangle " + request.getJobId() +
+                                 " Count : " + triangleCount + " Time Taken: " + to_string(msDuration) +
+                                 " milliseconds");
+            std::string out = triangleCount + " Time Taken: " + to_string(msDuration) + " ms , Begin Time: " +
+                              std::ctime(&begin_time_t) + " Data rate: " +
+                              std::to_string(JasmineGraphFrontEnd::stream_handler->getDataRate());
+            result_wr = write(connFd, out.c_str(), out.length());
             if (result_wr < 0) {
                 frontend_logger.error("Error writing to socket");
+                *loop_exit_p = true;
                 return;
             }
             result_wr = write(connFd, Conts::CARRIAGE_RETURN_NEW_LINE.c_str(), Conts::CARRIAGE_RETURN_NEW_LINE.size());
             if (result_wr < 0) {
                 frontend_logger.error("Error writing to socket");
+                *loop_exit_p = true;
             }
-            return;
-        }
-
-        std::string triangleCount = jobResponse.getParameter(Conts::PARAM_KEYS::STREAMING_TRIANGLE_COUNT);
-        auto end = chrono::high_resolution_clock::now();
-        auto dur = end - begin;
-        std::time_t begin_time_t = std::chrono::system_clock::to_time_t(begin);
-        std::time_t end_time_t = std::chrono::system_clock::to_time_t(end);
-        auto msDuration = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
-        frontend_logger.info("Streaming triangle " + std::to_string(uniqueId) +
-                             " Count : " + triangleCount + " Time Taken: " + to_string(msDuration) + " milliseconds");
-        std::string out = triangleCount + " Time Taken: " + to_string(msDuration) + " ms , Begin Time: " +
-                                                       std::ctime(&begin_time_t) + " End Time: " + std::ctime(&end_time_t);
-        result_wr = write(connFd, out.c_str(), out.length());
-        if (result_wr < 0) {
-            frontend_logger.error("Error writing to socket");
-            *loop_exit_p = true;
-            return;
-        }
-        result_wr = write(connFd, Conts::CARRIAGE_RETURN_NEW_LINE.c_str(), Conts::CARRIAGE_RETURN_NEW_LINE.size());
-        if (result_wr < 0) {
-            frontend_logger.error("Error writing to socket");
-            *loop_exit_p = true;
+            jobQueue.pop();
+        } else {
+            sleep(Conts::SCHEDULER_SLEEP_TIME);
         }
     }
-    loadAverageThread->join();
+    schedulerThread.join();  // Wait for the scheduler thread to finish
+    //loadAverageThread->join();
 }
 
 static void stop_strian_command(int connFd, bool *strian_exit) {

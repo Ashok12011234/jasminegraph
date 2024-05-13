@@ -39,6 +39,7 @@ limitations under the License.
 #include "../performancedb/PerformanceSQLiteDBInterface.h"
 #include "../query/algorithms/triangles/Triangles.h"
 #include "core/scheduler/JobScheduler.h"
+#include "../util/kafka/StreamHandler.h"
 
 class JasmineGraphHashMapCentralStore;
 
@@ -85,6 +86,8 @@ class JasmineGraphFrontEnd {
     std::map<std::string, std::thread> streamingThreads;
     static void record_load_average(string masterIP, PerformanceSQLiteDBInterface *perDB, int numberOfPartitions, bool *strian_exit,
                         string graphId);
+    static StreamHandler *stream_handler;
+    //static std::tuple<int, long> lastResult; // jobID -> Duration
 
  private:
     SQLiteDBInterface *sqlite;

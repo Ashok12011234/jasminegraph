@@ -29,10 +29,17 @@ class StreamHandler {
     bool isErrorInMessage(const cppkafka::Message &msg);
     bool isEndOfStream(const cppkafka::Message &msg);
     Partitioner graphPartitioner;
+    void setDataRate(int dataRate);
+    void setConstrained(bool isConstrained);
+    int getDataRate();
+    bool getConstrained();
+    void changeDataRate(float percentage);
 
- private:
+private:
     KafkaConnector *kstream;
     Logger frontend_logger;
     std::string stream_topic_name;
     std::vector<DataPublisher *> &workerClients;
+    int dataRate = 2;           // Number of edges arriving per second
+    bool isConstrained = true;     // Indicates if input edge speed is constrained
 };
